@@ -2,18 +2,25 @@ name: Cleanup Draft Releases
 
 on:
   schedule:
-    - cron: "0 0 * * 0" # каждое воскресенье в 00:00 UTC
-  workflow_dispatch:     # позволяет запускать вручную
+    - cron: "0 0 * * 0" # каждое воскресенье 00:00 UTC
+  workflow_dispatch:
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Delete all draft releases
-        uses: cli/gh-action@v2
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-          script: |
-            gh release list --limit 1000 --json url,isDraft \
-            | gh api -X DELETE -f url=@<(jq -r '.[] | select(.isDraft==true) | .url')
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Delete draft releases
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          gh auth login --with-token <<< "$GH_TOKEN"
+          gh api --paginate repos/:owner/:repo/releases \
+            | jq -r '.[] | select(.draft==true) | .url' \
+            | while read url; do
+                echo "Deleting draft: $url"
+                gh api -X DELETE "$url"
+              done
