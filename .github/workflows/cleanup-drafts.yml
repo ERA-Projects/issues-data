@@ -14,11 +14,12 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Delete draft releases
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh api --paginate repos/:owner/:repo/releases \
-            -H "Authorization: token $GITHUB_TOKEN" \
             | jq -r '.[] | select(.draft==true) | .url' \
             | while read url; do
                 echo "Deleting draft: $url"
-                gh api -X DELETE "$url" -H "Authorization: token $GITHUB_TOKEN"
+                gh api -X DELETE "$url"
               done
