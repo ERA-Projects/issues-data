@@ -1,25 +1,39 @@
-name: Cleanup Draft Releases
+name: Bi-weekly Cleanup Draft Releases
 
 on:
   schedule:
-    - cron: "0 0 * * 0" # каждое воскресенье 00:00 UTC
-  workflow_dispatch:
+    # Запуск в 00:00 каждого 1-го и 15-го числа месяца
+    - cron: '0 0 1,15 * *'
+  workflow_dispatch: # Кнопка для ручного запуска (удобно для тестирования)
 
 jobs:
-  cleanup:
+  delete-drafts:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Обязательное право для удаления релизов
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
       - name: Delete draft releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api --paginate repos/:owner/:repo/releases \
-            | jq -r '.[] | select(.draft==true) | .url' \
-            | while read url; do
-                echo "Deleting draft: $url"
-                gh api -X DELETE "$url"
-              done
+          echo "Сканируем ВСЕ релизы в репозитории ${{ github.repository }}..."
+          
+          # Используем --paginate, чтобы пройтись по всем страницам API
+          DRAFT_IDS=$(gh api --paginate repos/${{ github.repository }}/releases --jq '.[] | select(.draft == true) | .id')
+          
+          if [ -z "$DRAFT_IDS" ]; then
+            echo "Черновики не найдены. Очистка не требуется."
+            exit 0
+          fi
+          
+          # Проходимся по каждому найденному ID и отправляем запрос на удаление
+          for ID in $DRAFT_IDS; do
+            echo "Удаление черновика с ID: $ID..."
+            gh api \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              /repos/${{ github.repository }}/releases/$ID
+          done
+          
+          echo "Все черновики успешно удалены!"
